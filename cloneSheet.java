@@ -11,6 +11,8 @@
  * @throws POIXMLException if there were errors when cloning
  */
 public XSSFSheet cloneSheet(int sheetNum, String newName) {
+  // create a new 'createSheetFromClone method'
+
   validateSheetIndex(sheetNum);
   XSSFSheet srcSheet = sheets.get(sheetNum);
 
@@ -21,7 +23,11 @@ public XSSFSheet cloneSheet(int sheetNum, String newName) {
     validateSheetName(newName);
   }
 
+  // end of 'createSheetFromClone method'
+
   XSSFSheet clonedSheet = createSheet(newName);
+
+  // ----------- beginning of what should be broken out as a helper -----------
 
   // copy sheet's relations
   List<RelationPart> rels = srcSheet.getRelationParts();
@@ -38,6 +44,9 @@ public XSSFSheet cloneSheet(int sheetNum, String newName) {
     addRelation(rp, clonedSheet);
   }
 
+  // ----------- end of what should be broken out as a helper -----------
+
+  // want to leave these two try / catch blocks alone, keep them separate but should update the log messages
   try {
     for (PackageRelationship pr : srcSheet
       .getPackagePart()
@@ -84,6 +93,8 @@ public XSSFSheet cloneSheet(int sheetNum, String newName) {
 
   clonedSheet.setSelected(false);
 
+  // this could probably be split into a new function for cloning the sheet drawing and its relations
+
   // clone the sheet drawing along with its relationships
   if (dg != null) {
     if (ct.isSetDrawing()) {
@@ -105,5 +116,8 @@ public XSSFSheet cloneSheet(int sheetNum, String newName) {
       addRelation(rp, clonedDg);
     }
   }
+
+  // end of what should be broken out as a helper for cloning the sheet drawing and its relations
+
   return clonedSheet;
 }
