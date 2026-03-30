@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Asterisk Web Edition</title>
+    <style>
+        body {
+            background-color: #111;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            font-family: 'Courier New', Courier, monospace;
+        }
+
+        canvas {
+            border: 2px solid #555;
+            background-color: black;
+            box-shadow: 0 0 20px rgba(255, 255, 255, 0.1);
+        }
+
+        .ui {
+            margin-bottom: 10px;
+            text-align: center;
+        }
+
+        .controls {
+            margin-top: 10px;
+            font-size: 0.8em;
+            color: #888;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="ui">
+        <h2 id="levelDisplay">Level: 1</h2>
+        <div id="scoreDisplay">High Score: 0</div>
+    </div>
+
+    <canvas id="gameCanvas" width="600" height="400"></canvas>
+
+    <div class="controls">
+        Hold <strong>ENTER</strong> to Rise | Release to Fall
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        const levelDisplay = document.getElementById('levelDisplay');
+        const scoreDisplay = document.getElementById('scoreDisplay');
+
+        let level = 1;
+        let highScore = localStorage.getItem('asteriskHighScore') || 0;
+        let xPos = 0;
+        let yPos = canvas.height / 2;
+        let isEnterDown = false;
+        let obstacles = [];
+        let gameActive = false;
+        let baseSpeed = 2;
+        let animationId;
+
+        scoreDisplay.innerText = `High Score: ${highScore}`;
+
+        function initLevel() {
+            xPos = 0;
+            yPos = canvas.height / 2;
+            levelDisplay.innerText = `Level: ${level}`;
+            generateObstacles();
+            drawBackground();
+            startCountdown(3);
+        }
+
+        function generateObstacles() {
+            obstacles = [];
+            let count = level * 15;
+            for (let i = 0; i < count; i++) {
+                obstacles.push({
+                    x: Math.random() * (canvas.width - 60) + 40,
+                    y: Math.random() * (canvas.height - 20) + 10
+                });
+            }
+        }
+
+        function drawBackground() {
+            ctx.fillStyle = "black";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.strokeStyle = "white";
+            ctx.lineWidth = 2;
+            ctx.strokeRect(0, 0, canvas.width, canvas.height);
+
+            // Goal Gap
+            ctx.beginPath();
+            ctx.strokeStyle = "black";
+            ctx.lineWidth = 4;
+            ctx.moveTo(canvas.width, canvas.height / 2 - 25);
+            ctx.lineTo(canvas.width, canvas.height / 2 + 25);
+            ctx.stroke();
+
+            ctx.fillStyle = "white";
+            obstacles.forEach(obs => {
+                ctx.fillRect(obs.x, obs.y, 2, 2);
+            });
+        }
+
+        function startCountdown(seconds) {
+            gameActive = false;
+            let count = seconds;
+
+            const timer = setInterval(() => {
+                // Clear and redraw background/obstacles every tick of the countdown
+                drawBackground();
+
+                ctx.fillStyle = "yellow";
+                ctx.font = "40px Courier New";
+                ctx.textAlign = "center";
+
+                if (count > 0) {
+                    ctx.fillText(count, canvas.width / 2, canvas.height / 2);
+                } else if (count === 0) {
+                    ctx.fillText("GO!", canvas.width / 2, canvas.height / 2);
+                }
+
+                if (count < 0) {
+                    clearInterval(timer);
+                    // CRITICAL: Clear the "GO!" text by redrawing the clean background 
+                    // one last time before the game loop starts.
+                    drawBackground();
+                    gameActive = true;
+                    gameLoop();
+                }
+                count--;
+            }, 800);
+        }
+
+        function gameLoop() {
+            if (!gameActive) return;
+
+            xPos += baseSpeed + (level * 0.2);
+            if (isEnterDown) yPos -= 2.5; else yPos += 2.5;
+
+            // Victory Check
+            if (xPos >= canvas.width - 5) {
+                nextLevel();
+                return; // Important: Exit the function immediately
+            }
+
+            // Boundary Check
+            if (yPos <= 2 || yPos >= canvas.height - 2) {
+                gameOver("You hit the boundary!");
+                return;
+            }
+
+            // Obstacle Check
+            const pixel = ctx.getImageData(xPos, yPos, 1, 1).data;
+            if (pixel[0] > 150 && pixel[1] > 150 && pixel[2] > 150) {
+                gameOver("You crashed into an obstacle!");
+                return;
+            }
+
+            ctx.fillStyle = "cyan";
+            ctx.fillRect(xPos, yPos, 2, 2);
+
+            // Always update the ID
+            animationId = requestAnimationFrame(gameLoop);
+        }
+
+        function nextLevel() {
+            // 1. Stop the current animation loop immediately
+            gameActive = false;
+            cancelAnimationFrame(animationId);
+
+            // 2. Show the Victory Message
+            alert(`VICTORY! \n\nYou cleared Level ${level}. \nGet ready for Level ${level + 1}!`);
+
+            // 3. Increment level and reset the stage
+            level++;
+            initLevel();
+        }
+
+        function gameOver(reason) {
+            gameActive = false;
+            let message = `GAME OVER\n${reason}\n\nFinal Level: ${level}`;
+
+            if (level > highScore) {
+                highScore = level;
+                localStorage.setItem('asteriskHighScore', highScore);
+                scoreDisplay.innerText = `High Score: ${highScore}`;
+                message += "\n\nNEW HIGH SCORE! 🎉";
+            } else {
+                message += `\nHigh Score to beat: ${highScore}`;
+            }
+
+            // LOSS ALERT
+            alert(message);
+            level = 1;
+            initLevel();
+        }
+
+        window.addEventListener('keydown', (e) => { if (e.key === "Enter") isEnterDown = true; });
+        window.addEventListener('keyup', (e) => { if (e.key === "Enter") isEnterDown = false; });
+
+        initLevel();
+    </script>
+</body>
+
+</html>
