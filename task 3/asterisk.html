@@ -56,6 +56,8 @@
         const levelDisplay = document.getElementById('levelDisplay');
         const scoreDisplay = document.getElementById('scoreDisplay');
 
+        const rainbowColors = ['red', 'orange', 'yellow', 'green', 'blue', 'indigo', 'violet'];
+
         let level = 1;
         let highScore = localStorage.getItem('asteriskHighScore') || 0;
         let xPos = 0;
@@ -64,6 +66,8 @@
         let obstacles = [];
         let gameActive = false;
         let baseSpeed = 2;
+        let streak = 0; // New: Tracking distance for speed boost
+        let currentColor = rainbowColors[0];
         let animationId;
 
         scoreDisplay.innerText = `High Score: ${highScore}`;
@@ -71,7 +75,9 @@
         function initLevel() {
             xPos = 0;
             yPos = canvas.height / 2;
+            streak = 0; // Reset streak
             levelDisplay.innerText = `Level: ${level}`;
+            currentColor = rainbowColors[(level - 1) % rainbowColors.length];
             generateObstacles();
             drawBackground();
             startCountdown(3);
@@ -103,7 +109,7 @@
             ctx.lineTo(canvas.width, canvas.height / 2 + 25);
             ctx.stroke();
 
-            ctx.fillStyle = "white";
+            ctx.fillStyle = currentColor;
             obstacles.forEach(obs => {
                 ctx.fillRect(obs.x, obs.y, 2, 2);
             });
@@ -114,9 +120,7 @@
             let count = seconds;
 
             const timer = setInterval(() => {
-                // Clear and redraw background/obstacles every tick of the countdown
                 drawBackground();
-
                 ctx.fillStyle = "yellow";
                 ctx.font = "40px Courier New";
                 ctx.textAlign = "center";
@@ -129,8 +133,6 @@
 
                 if (count < 0) {
                     clearInterval(timer);
-                    // CRITICAL: Clear the "GO!" text by redrawing the clean background 
-                    // one last time before the game loop starts.
                     drawBackground();
                     gameActive = true;
                     gameLoop();
@@ -142,13 +144,25 @@
         function gameLoop() {
             if (!gameActive) return;
 
-            xPos += baseSpeed + (level * 0.2);
+            // FEATURE: Speed Streak Logic
+            streak++;
+            let currentSpeed = baseSpeed + (level * 0.2);
+            let playerColor = currentColor;
+
+            if (streak > 150) { 
+                currentSpeed += 1.5; // Speed boost after a short run
+            }
+            if (streak > 300) { 
+                currentSpeed += 2.0; // Additional speed boost for long streaks
+            }
+
+            xPos += currentSpeed;
             if (isEnterDown) yPos -= 2.5; else yPos += 2.5;
 
             // Victory Check
             if (xPos >= canvas.width - 5) {
                 nextLevel();
-                return; // Important: Exit the function immediately
+                return;
             }
 
             // Boundary Check
@@ -157,29 +171,23 @@
                 return;
             }
 
-            // Obstacle Check
-            const pixel = ctx.getImageData(xPos, yPos, 1, 1).data;
+            // Obstacle Check (Sample slightly ahead for better collision feel at high speed)
+            const pixel = ctx.getImageData(xPos + 1, yPos, 1, 1).data;
             if (pixel[0] > 150 && pixel[1] > 150 && pixel[2] > 150) {
                 gameOver("You crashed into an obstacle!");
                 return;
             }
 
-            ctx.fillStyle = "cyan";
+            ctx.fillStyle = playerColor;
             ctx.fillRect(xPos, yPos, 2, 2);
 
-            // Always update the ID
             animationId = requestAnimationFrame(gameLoop);
         }
 
         function nextLevel() {
-            // 1. Stop the current animation loop immediately
             gameActive = false;
             cancelAnimationFrame(animationId);
-
-            // 2. Show the Victory Message
             alert(`VICTORY! \n\nYou cleared Level ${level}. \nGet ready for Level ${level + 1}!`);
-
-            // 3. Increment level and reset the stage
             level++;
             initLevel();
         }
@@ -193,11 +201,8 @@
                 localStorage.setItem('asteriskHighScore', highScore);
                 scoreDisplay.innerText = `High Score: ${highScore}`;
                 message += "\n\nNEW HIGH SCORE! 🎉";
-            } else {
-                message += `\nHigh Score to beat: ${highScore}`;
             }
 
-            // LOSS ALERT
             alert(message);
             level = 1;
             initLevel();
