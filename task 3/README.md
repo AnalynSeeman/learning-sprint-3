@@ -7,12 +7,10 @@ Asterisk is a high-precision, side-scrolling survival game built for the web. In
 ## 🛠 Features
 
 * **Physics-Based Movement:** Vertical momentum controlled entirely by the `ENTER` key.
-* **Dynamic Difficulty:** Procedural obstacle generation that scales in density as you progress through levels.
-* **Speed Streak System:** Reward for survival! Maintaining your flight increases your speed and changes your trail color:
-    * **Cyan:** Base Speed.
-    * **Yellow:** Level 1 Boost (150+ frames).
-    * **Orangered:** Level 2 Boost (300+ frames).
-* **Persistent Scoring:** High scores are saved to your browser's LocalStorage.
+* **Dynamic Difficulty:** Procedural obstacle generation scales obstacle density as you progress through levels.
+* **Rainbow Level Colors:** Each level cycles through the rainbow palette. The player trail and obstacles change color per level using Red, Orange, Yellow, Green, Blue, Indigo, and Violet.
+* **Speed Streak System:** Survival increases speed over time with additional boosts for longer streaks.
+* **Persistent Scoring:** High scores are saved in the browser's LocalStorage.
 
 ---
 
@@ -36,36 +34,38 @@ Navigate your point (the asterisk) from the left side of the screen to the **Goa
 
 ## 🏗 Technical Overview
 
-The game is rendered on a single HTML5 `<canvas>` element using a 2D rendering context. 
+The game is rendered on a single HTML5 `<canvas>` element using the 2D rendering context.
 
 ### Collision Detection
-The game utilizes **Pixel-Perfect Collision Detection**. Instead of calculating geometric overlaps, the engine samples the pixel data directly in front of the player's coordinates:
+The game uses **Pixel-Perfect Collision Detection**. Instead of calculating geometric overlaps, the engine samples the pixel data directly in front of the player's coordinates:
 
 ```javascript
 const pixel = ctx.getImageData(xPos + 1, yPos, 1, 1).data;
-if (pixel[0] > 150 && pixel[1] > 150 && pixel[2] > 150) { 
-    // Collision Logic 
+if (pixel[0] > 150 && pixel[1] > 150 && pixel[2] > 150) {
+    // Collision Logic
 }
+```
 
-Note: We sample xPos + 1 to ensure collisions are caught even at high "Streak" speeds.
-Game State Management
+> Note: The game samples `xPos + 1` to ensure collisions are caught reliably even at higher speeds.
 
-    initLevel(): Resets positions and triggers the procedural generation of obstacles.
+### Game State Management
 
-    startCountdown(): A non-blocking timer that allows the player to visualize the path before movement begins.
+* `initLevel()`: Resets positions, updates level state, selects the next rainbow color, and generates obstacles.
+* `startCountdown()`: A non-blocking timer that displays a ready countdown before gameplay begins.
+* `gameLoop()`: Uses `requestAnimationFrame` for smooth animation and updates position, speed, and collision checks.
 
-    gameLoop(): Managed via requestAnimationFrame for smooth 60FPS performance.
+---
 
-🚀 Getting Started
+## 🚀 Getting Started
 
-    Clone the repository.
+1. Clone the repository.
+2. Open `asterisk.html` in any modern web browser.
+3. No external dependencies or local servers are required.
 
-    Open index.html in any modern web browser.
+---
 
-    No external dependencies or local servers are required.
+## 👥 Contribution & Development
 
-👥 Contribution & Development
+This project was developed collaboratively. Each major feature (collision engine, level scaling, speed streaks, and rainbow level colors) was reviewed by the team to ensure code quality and clarity.
 
-This project was developed as a collaborative effort. Each major feature (Collision Engine, Level Scaling, Speed Streaks) was developed, reviewed, and committed by the team to ensure code quality and adherence to "Clean Code" principles.
-
-    Team Note: This documentation was initially scaffolded via AI and subsequently validated and refined by the development team for technical accuracy.
+> Team Note: This documentation was initially scaffolded via AI and then validated and refined by the development team for technical accuracy.
