@@ -11,113 +11,104 @@
  * @throws POIXMLException if there were errors when cloning
  */
 public XSSFSheet cloneSheet(int sheetNum, String newName) {
-  // create a new 'createSheetFromClone method'
+    // 1. Setup and Validation
+    XSSFSheet srcSheet = getSourceSheetForCloning(sheetNum);
+    String validatedName = resolveNewSheetName(srcSheet, newName);
 
-  validateSheetIndex(sheetNum);
-  XSSFSheet srcSheet = sheets.get(sheetNum);
+    // 2. Initialize the New Sheet
+    XSSFSheet clonedSheet = createSheet(validatedName);
 
-  if (newName == null) {
-    String srcName = srcSheet.getSheetName();
-    newName = getUniqueSheetName(srcName);
-  } else {
-    validateSheetName(newName);
-  }
+    // 3. Transfer Data and Relationships
+    copySheetRelationships(srcSheet, clonedSheet);
+    copySheetExternalRelationships(srcSheet, clonedSheet);
+    copySheetContent(srcSheet, clonedSheet);
 
-  // end of 'createSheetFromClone method'
+    // 4. Post-Processing and Special Elements
+    sanitizeClonedSheet(clonedSheet);
+    cloneDrawingIfPresent(srcSheet, clonedSheet);
 
-  XSSFSheet clonedSheet = createSheet(newName);
+    clonedSheet.setSelected(false);
+    return clonedSheet;
+}
 
-  // ----------- beginning of what should be broken out as a helper -----------
+private XSSFSheet getSourceSheetForCloning(int sheetNum) {
+    validateSheetIndex(sheetNum);
+    return sheets.get(sheetNum);
+}
 
-  // copy sheet's relations
-  List<RelationPart> rels = srcSheet.getRelationParts();
-  // if the sheet being cloned has a drawing then remember it and re-create it too
-  XSSFDrawing dg = null;
-  for (RelationPart rp : rels) {
-    POIXMLDocumentPart r = rp.getDocumentPart();
-    // do not copy the drawing relationship, it will be re-created
-    if (r instanceof XSSFDrawing) {
-      dg = (XSSFDrawing) r;
-      continue;
+private String resolveNewSheetName(XSSFSheet srcSheet, String providedName) {
+    if (providedName == null) {
+        return getUniqueSheetName(srcSheet.getSheetName());
     }
+    validateSheetName(providedName);
+    return providedName;
+}
 
-    addRelation(rp, clonedSheet);
-  }
-
-  // ----------- end of what should be broken out as a helper -----------
-
-  // want to leave these two try / catch blocks alone, keep them separate but should update the log messages
-  try {
-    for (PackageRelationship pr : srcSheet
-      .getPackagePart()
-      .getRelationships()) {
-      if (pr.getTargetMode() == TargetMode.EXTERNAL) {
-        clonedSheet
-          .getPackagePart()
-          .addExternalRelationship(
-            pr.getTargetURI().toASCIIString(),
-            pr.getRelationshipType(),
-            pr.getId()
-          );
-      }
+private void copySheetRelationships(XSSFSheet src, XSSFSheet dest) {
+    for (RelationPart rp : src.getRelationParts()) {
+        // We skip XSSFDrawing here because it requires a specialized 
+        // patriarch-based recreation later to avoid XML corruption.
+        if (!(rp.getDocumentPart() instanceof XSSFDrawing)) {
+            addRelation(rp, dest);
+        }
     }
-  } catch (InvalidFormatException e) {
-    throw new POIXMLException("Failed to clone sheet", e);
-  }
+}
 
-  try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-    srcSheet.write(out);
-    try (
-      ByteArrayInputStream bis = new ByteArrayInputStream(out.toByteArray())
-    ) {
-      clonedSheet.read(bis);
+private void copySheetExternalRelationships(XSSFSheet src, XSSFSheet dest) {
+    try {
+        for (PackageRelationship pr : src.getPackagePart().getRelationships()) {
+            if (pr.getTargetMode() == TargetMode.EXTERNAL) {
+                dest.getPackagePart().addExternalRelationship(
+                    pr.getTargetURI().toASCIIString(),
+                    pr.getRelationshipType(),
+                    pr.getId()
+                );
+            }
+        }
+    } catch (InvalidFormatException e) {
+        throw new POIXMLException("Failed to clone external relationships for sheet: " + src.getSheetName(), e);
     }
-  } catch (IOException e) {
-    throw new POIXMLException("Failed to clone sheet", e);
-  }
-  CTWorksheet ct = clonedSheet.getCTWorksheet();
-  if (ct.isSetLegacyDrawing()) {
-    logger.log(
-      POILogger.WARN,
-      "Cloning sheets with comments is not yet supported."
-    );
-    ct.unsetLegacyDrawing();
-  }
-  if (ct.isSetPageSetup()) {
-    logger.log(
-      POILogger.WARN,
-      "Cloning sheets with page setup is not yet supported."
-    );
-    ct.unsetPageSetup();
-  }
+}
 
-  clonedSheet.setSelected(false);
+private void copySheetContent(XSSFSheet src, XSSFSheet dest) {
+    try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+        src.write(out);
+        try (ByteArrayInputStream bis = new ByteArrayInputStream(out.toByteArray())) {
+            dest.read(bis);
+        }
+    } catch (IOException e) {
+        throw new POIXMLException("Critical error during binary copy of sheet: " + src.getSheetName(), e);
+    }
+}
 
-  // this could probably be split into a new function for cloning the sheet drawing and its relations
+private void sanitizeClonedSheet(XSSFSheet sheet) {
+    CTWorksheet ct = sheet.getCTWorksheet();
+    
+    if (ct.isSetLegacyDrawing()) {
+        logger.log(POILogger.WARN, "Comments/Legacy Drawings are not supported in cloning and have been removed.");
+        ct.unsetLegacyDrawing();
+    }
+    if (ct.isSetPageSetup()) {
+        logger.log(POILogger.WARN, "PageSetup properties are not supported in cloning and have been removed.");
+        ct.unsetPageSetup();
+    }
+}
 
-  // clone the sheet drawing along with its relationships
-  if (dg != null) {
+private void cloneDrawingIfPresent(XSSFSheet src, XSSFSheet dest) {
+    XSSFDrawing srcDrawing = src.getDrawingPatriarch();
+    if (srcDrawing == null) return;
+
+    // Reset existing drawing reference in the XML bean to allow fresh initialization
+    CTWorksheet ct = dest.getCTWorksheet();
     if (ct.isSetDrawing()) {
-      // unset the existing reference to the drawing,
-      // so that subsequent call of clonedSheet.createDrawingPatriarch() will create a new one
-      ct.unsetDrawing();
+        ct.unsetDrawing();
     }
-    XSSFDrawing clonedDg = clonedSheet.createDrawingPatriarch();
-    // copy drawing contents
-    clonedDg.getCTDrawing().set(dg.getCTDrawing());
 
-    clonedDg = clonedSheet.createDrawingPatriarch();
+    XSSFDrawing clonedDrawing = dest.createDrawingPatriarch();
+    clonedDrawing.getCTDrawing().set(srcDrawing.getCTDrawing());
 
-    // Clone drawing relations
-    List<RelationPart> srcRels = srcSheet
-      .createDrawingPatriarch()
-      .getRelationParts();
-    for (RelationPart rp : srcRels) {
-      addRelation(rp, clonedDg);
+    // Clone drawing-level relations (e.g., images inside the drawing)
+    for (RelationPart rp : srcDrawing.getRelationParts()) {
+        addRelation(rp, clonedDrawing);
     }
-  }
-
-  // end of what should be broken out as a helper for cloning the sheet drawing and its relations
-
-  return clonedSheet;
 }
