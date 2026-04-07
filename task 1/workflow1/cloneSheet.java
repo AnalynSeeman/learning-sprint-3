@@ -20,17 +20,10 @@ public XSSFSheet cloneSheet(int sheetNum, String newName) {
     XSSFDrawing dg = copySheetRelations(srcSheet, clonedSheet);
 
     // Copy external relationships
-    try {
-        for (PackageRelationship pr : srcSheet.getPackagePart().getRelationships()) {
-            if (pr.getTargetMode() == TargetMode.EXTERNAL) {
-                clonedSheet.getPackagePart().addExternalRelationship(
-                    pr.getTargetURI().toASCIIString(),
-                    pr.getRelationshipType(),
-                    pr.getId()
-                );
-            }
-        }
-    } catch (InvalidFormatException e) {
+    try{
+        copyExternalRelationships(srcSheet, clonedSheet);
+    }
+    catch (InvalidFormatException e) {
         throw new POIXMLException("Failed to clone sheet external relationships", e);
     }
 
@@ -95,6 +88,18 @@ private XSSFDrawing copySheetRelations(XSSFSheet srcSheet, XSSFSheet clonedSheet
         addRelation(rp, clonedSheet);
     }
     return dg;
+}
+
+private void copyExternalRelationships(XSSFSheet srcSheet, XSSFSheet clonedSheet) throws InvalidFormatException {
+    for (PackageRelationship pr : srcSheet.getPackagePart().getRelationships()) {
+        if (pr.getTargetMode() == TargetMode.EXTERNAL) {
+            clonedSheet.getPackagePart().addExternalRelationship(
+                pr.getTargetURI().toASCIIString(),
+                pr.getRelationshipType(),
+                pr.getId()
+            );
+        }
+    }
 }
 
 /**
